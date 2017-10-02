@@ -15,16 +15,16 @@
 
 /*::
 type Options = {
-  subscribe: (...args: any) => Promise<any>,
-  unsubscribe: (...args: any) => Promise<any>,
+  onSubscribe: (...args: any) => Promise<any>,
+  onUnsubscribe: (...args: any) => Promise<any>,
 };
 type SubscriptionObject = {promise: Promise<any>, refCount: number};
 type SubscriptionMap = {[key: string]: SubscriptionObject};
 */
 module.exports = class SubscriptionDedupe {
   constructor(options/*: Options*/) {
-    if (!options || !options.subscribe || !options.unsubscribe) {
-      throw new Error("'subscribe', 'unsubscribe' required.");
+    if (!options || !options.onSubscribe || !options.onUnsubscribe) {
+      throw new Error("'onSubscribe', 'onUnsubscribe' required.");
     }
     this.subscriptions = {};
     this.options = options;
@@ -35,13 +35,13 @@ module.exports = class SubscriptionDedupe {
   subscriptions: SubscriptionMap;
   */
 
-  addSubscription(topic/*: string */) {
+  subscribe(topic/*: string */) {
     let existing = this.subscriptions[topic];
 
     if (!existing) {
       // Nothing found, create the subscription object
       existing = this.subscriptions[topic] = {
-        promise: this.options.subscribe(topic),
+        promise: this.options.onSubscribe(topic),
         refCount: 0
       };
     }
@@ -50,13 +50,13 @@ module.exports = class SubscriptionDedupe {
     return existing.promise;
   }
 
-  removeSubscription(topic/*: string */) {
+  unsubscribe(topic/*: string */) {
     let existing = this.subscriptions[topic];
 
     if (existing) {
       existing.refCount--;
       if (existing.refCount === 0) {
-        this.options.unsubscribe(topic);
+        this.options.onUnsubscribe(topic);
         delete this.subscriptions[topic];
       }
     }

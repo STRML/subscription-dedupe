@@ -6,7 +6,7 @@ A simple module for reference-counting subscriptions and delegating to a handler
 
 This simple example shows how to dedupe subscriptions to Redis.
 
-When creating a `SubscriptionDedupe`, you must define two methods, `addListener` and `removeListener`.
+When creating a `SubscriptionDedupe`, you must define two methods, `onSubscribe` and `onUnsubscribe`.
 If you wish to listen to success/error, you should return a Promise.
 
 ```js
@@ -18,10 +18,10 @@ const redisClient = redis.createClient({/*...*/});
 const psubscribeAsync = Promise.promisify(redisClient.psubscribe, {context: redisClient});
 const punsubscribeAsync = Promise.promisify(redisClient.punsubscribe, {context: redisClient});
 const deduper = new SubscriptionDedupe({
-  addListener(topic) {
+  onSubscribe(topic) {
     return psubscribeAsync(topic);
   },
-  removeListener(topic) {
+  onUnsubscribe(topic) {
     return punsubscribeAsync(topic);
   }
 });
@@ -30,14 +30,14 @@ const deduper = new SubscriptionDedupe({
 // Usage
 //
 
-// addListener() called
+// onSubscribe() called
 await deduper.subscribe('topic');
-// addListener() NOT called! The original, resolved promise is returned instead.
+// onSubscribe() NOT called! The original, resolved promise is returned instead.
 await deduper.subscribe('topic');
 
-// removeListener NOT called, as there is still an open subscription.
+// onUnsubscribe NOT called, as there is still an open subscription.
 await deduper.unsubscribe('topic');
-// removeListener() called
+// onUnsubscribe() called
 await deduper.unsubscribe('topic');
 
 //

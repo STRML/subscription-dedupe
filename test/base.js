@@ -8,17 +8,17 @@ describe('subscription-dedupe', () => {
 
   let instance;
   const optionsBase = {
-    subscribe() {
+    onSubscribe() {
       return new Promise((resolve) => setTimeout(() => resolve({}), 0));
     },
-    unsubscribe() {
+    onUnsubscribe() {
       return new Promise((resolve) => setTimeout(resolve, 0));
     },
   }
   beforeEach(function() {
     this.sandbox = sinon.sandbox.create();
-    this.sandbox.spy(optionsBase, 'subscribe');
-    this.sandbox.spy(optionsBase, 'unsubscribe');
+    this.sandbox.spy(optionsBase, 'onSubscribe');
+    this.sandbox.spy(optionsBase, 'onUnsubscribe');
   });
 
   afterEach(function() {
@@ -27,57 +27,57 @@ describe('subscription-dedupe', () => {
 
   describe('add/remove basics', function() {
 
-    describe('subscribe()', function() {
+    describe('onSubscribe()', function() {
 
-      it('Calls `subscribe` on add', async function() {
+      it('Calls `onSubscribe` on add', async function() {
         const topic = 'foo';
         const instance = new SubscriptionDedupe(optionsBase);
-        await instance.addSubscription(topic);
-        assert(optionsBase.subscribe.callCount === 1);
+        await instance.subscribe(topic);
+        assert(optionsBase.onSubscribe.callCount === 1);
       });
 
-      it('Only calls `subscribe` once', async function() {
+      it('Only calls `onSubscribe` once', async function() {
         const topic = 'foo';
         const instance = new SubscriptionDedupe(optionsBase);
-        await instance.addSubscription(topic);
-        assert(optionsBase.subscribe.callCount === 1);
-        await instance.addSubscription(topic);
-        assert(optionsBase.subscribe.callCount === 1);
+        await instance.subscribe(topic);
+        assert(optionsBase.onSubscribe.callCount === 1);
+        await instance.subscribe(topic);
+        assert(optionsBase.onSubscribe.callCount === 1);
       });
     });
 
-    describe('unsubscribe()', function() {
+    describe('onUnsubscribe()', function() {
 
       it('removes subscription at 0', async function() {
         const topic = 'foo';
         const instance = new SubscriptionDedupe(optionsBase);
-        await instance.addSubscription(topic);
-        assert(optionsBase.subscribe.callCount === 1);
-        await instance.removeSubscription(topic);
+        await instance.subscribe(topic);
+        assert(optionsBase.onSubscribe.callCount === 1);
+        await instance.unsubscribe(topic);
         assert(instance.subscriptions[topic] === undefined);
-        assert(optionsBase.unsubscribe.callCount === 1);
+        assert(optionsBase.onUnsubscribe.callCount === 1);
       });
 
       it('doesn\'t remove nonexistent', async function() {
         const topic = 'foo';
         const instance = new SubscriptionDedupe(optionsBase);
-        await instance.removeSubscription(topic);
+        await instance.unsubscribe(topic);
         assert(instance.subscriptions[topic] === undefined);
-        assert(optionsBase.unsubscribe.callCount === 0);
+        assert(optionsBase.onUnsubscribe.callCount === 0);
       });
 
       it('removes subscription only once', async function() {
         const topic = 'foo';
         const instance = new SubscriptionDedupe(optionsBase);
-        await times(5, () => instance.addSubscription(topic));
-        assert(optionsBase.subscribe.callCount === 1);
+        await times(5, () => instance.subscribe(topic));
+        assert(optionsBase.onSubscribe.callCount === 1);
         assert(instance.subscriptions[topic].refCount === 5);
-        await times(4, () => instance.removeSubscription(topic));
-        assert(optionsBase.unsubscribe.callCount === 0);
+        await times(4, () => instance.unsubscribe(topic));
+        assert(optionsBase.onUnsubscribe.callCount === 0);
         assert(instance.subscriptions[topic].refCount === 1);
-        await times(4, () => instance.removeSubscription(topic));
+        await times(4, () => instance.unsubscribe(topic));
         assert(instance.subscriptions[topic] === undefined);
-        assert(optionsBase.unsubscribe.callCount === 1);
+        assert(optionsBase.onUnsubscribe.callCount === 1);
       });
     });
   });
