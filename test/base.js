@@ -8,17 +8,17 @@ describe('subscription-dedupe', () => {
 
   let instance;
   const optionsBase = {
-    addListener() {
+    subscribe() {
       return new Promise((resolve) => setTimeout(() => resolve({}), 0));
     },
-    removeListener() {
+    unsubscribe() {
       return new Promise((resolve) => setTimeout(resolve, 0));
     },
   }
   beforeEach(function() {
     this.sandbox = sinon.sandbox.create();
-    this.sandbox.spy(optionsBase, 'addListener');
-    this.sandbox.spy(optionsBase, 'removeListener');
+    this.sandbox.spy(optionsBase, 'subscribe');
+    this.sandbox.spy(optionsBase, 'unsubscribe');
   });
 
   afterEach(function() {
@@ -27,35 +27,35 @@ describe('subscription-dedupe', () => {
 
   describe('add/remove basics', function() {
 
-    describe('addListener()', function() {
+    describe('subscribe()', function() {
 
-      it('Calls `addListener` on add', async function() {
+      it('Calls `subscribe` on add', async function() {
         const topic = 'foo';
         const instance = new SubscriptionDedupe(optionsBase);
         await instance.addSubscription(topic);
-        assert(optionsBase.addListener.callCount === 1);
+        assert(optionsBase.subscribe.callCount === 1);
       });
 
-      it('Only calls `addListener` once', async function() {
+      it('Only calls `subscribe` once', async function() {
         const topic = 'foo';
         const instance = new SubscriptionDedupe(optionsBase);
         await instance.addSubscription(topic);
-        assert(optionsBase.addListener.callCount === 1);
+        assert(optionsBase.subscribe.callCount === 1);
         await instance.addSubscription(topic);
-        assert(optionsBase.addListener.callCount === 1);
+        assert(optionsBase.subscribe.callCount === 1);
       });
     });
 
-    describe('removeListener()', function() {
+    describe('unsubscribe()', function() {
 
       it('removes subscription at 0', async function() {
         const topic = 'foo';
         const instance = new SubscriptionDedupe(optionsBase);
         await instance.addSubscription(topic);
-        assert(optionsBase.addListener.callCount === 1);
+        assert(optionsBase.subscribe.callCount === 1);
         await instance.removeSubscription(topic);
         assert(instance.subscriptions[topic] === undefined);
-        assert(optionsBase.removeListener.callCount === 1);
+        assert(optionsBase.unsubscribe.callCount === 1);
       });
 
       it('doesn\'t remove nonexistent', async function() {
@@ -63,21 +63,21 @@ describe('subscription-dedupe', () => {
         const instance = new SubscriptionDedupe(optionsBase);
         await instance.removeSubscription(topic);
         assert(instance.subscriptions[topic] === undefined);
-        assert(optionsBase.removeListener.callCount === 0);
+        assert(optionsBase.unsubscribe.callCount === 0);
       });
 
       it('removes subscription only once', async function() {
         const topic = 'foo';
         const instance = new SubscriptionDedupe(optionsBase);
         await times(5, () => instance.addSubscription(topic));
-        assert(optionsBase.addListener.callCount === 1);
+        assert(optionsBase.subscribe.callCount === 1);
         assert(instance.subscriptions[topic].refCount === 5);
         await times(4, () => instance.removeSubscription(topic));
-        assert(optionsBase.removeListener.callCount === 0);
+        assert(optionsBase.unsubscribe.callCount === 0);
         assert(instance.subscriptions[topic].refCount === 1);
         await times(4, () => instance.removeSubscription(topic));
         assert(instance.subscriptions[topic] === undefined);
-        assert(optionsBase.removeListener.callCount === 1);
+        assert(optionsBase.unsubscribe.callCount === 1);
       });
     });
   });

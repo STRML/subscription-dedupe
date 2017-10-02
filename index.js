@@ -15,16 +15,16 @@
 
 /*::
 type Options = {
-  addListener: (...args: any) => Promise<any>,
-  removeListener: (...args: any) => Promise<any>,
+  subscribe: (...args: any) => Promise<any>,
+  unsubscribe: (...args: any) => Promise<any>,
 };
 type SubscriptionObject = {promise: Promise<any>, refCount: number};
 type SubscriptionMap = {[key: string]: SubscriptionObject};
 */
 module.exports = class SubscriptionDedupe {
   constructor(options/*: Options*/) {
-    if (!options || !options.addListener || !options.removeListener) {
-      throw new Error("'addListener', 'removeListener' required.");
+    if (!options || !options.subscribe || !options.unsubscribe) {
+      throw new Error("'subscribe', 'unsubscribe' required.");
     }
     this.subscriptions = {};
     this.options = options;
@@ -41,7 +41,7 @@ module.exports = class SubscriptionDedupe {
     if (!existing) {
       // Nothing found, create the subscription object
       existing = this.subscriptions[topic] = {
-        promise: this.options.addListener(topic),
+        promise: this.options.subscribe(topic),
         refCount: 0
       };
     }
@@ -56,7 +56,7 @@ module.exports = class SubscriptionDedupe {
     if (existing) {
       existing.refCount--;
       if (existing.refCount === 0) {
-        this.options.removeListener(topic);
+        this.options.unsubscribe(topic);
         delete this.subscriptions[topic];
       }
     }
