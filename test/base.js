@@ -8,14 +8,12 @@ describe('subscription-dedupe', () => {
 
   let instance;
   const optionsBase = {
-    delimiter: ':',
     addListener() {
       return new Promise((resolve) => setTimeout(() => resolve({}), 0));
     },
     removeListener() {
       return new Promise((resolve) => setTimeout(resolve, 0));
     },
-    levels: 1,
   }
   beforeEach(function() {
     this.sandbox = sinon.sandbox.create();
@@ -81,73 +79,6 @@ describe('subscription-dedupe', () => {
         assert(instance.subscriptions[topic] === undefined);
         assert(optionsBase.removeListener.callCount === 1);
       });
-    });
-  });
-
-  describe('wildcard stack', function() {
-
-    it('Doesn\'t call addListener up the stack', async function() {
-      const instance = new SubscriptionDedupe(Object.assign({}, optionsBase, {
-        levels: 2
-      }));
-      await instance.addSubscription('foo:*');
-      assert(optionsBase.addListener.firstCall.args[0] === 'foo:*');
-      assert(optionsBase.addListener.callCount === 1);
-      await instance.addSubscription('foo:bar');
-      assert(optionsBase.addListener.callCount === 1);
-    });
-
-    it('Doesn\'t call addListener up the stack (mid wildcard)', async function() {
-      const instance = new SubscriptionDedupe(Object.assign({}, optionsBase, {
-        levels: 5
-      }));
-      await instance.addSubscription('foo:*:*:*:*');
-      assert(optionsBase.addListener.firstCall.args[0] === 'foo:*:*:*:*');
-      assert(optionsBase.addListener.callCount === 1);
-      await instance.addSubscription('foo:boo:bar:baz:biff');
-      assert(optionsBase.addListener.callCount === 1);
-      await instance.addSubscription('foo:*:bar:baz:biff'); // another wildcard shouldn't either
-      assert(optionsBase.addListener.callCount === 1);
-      await instance.addSubscription('foo:*:bar:baz:*');
-      assert(optionsBase.addListener.callCount === 1);
-      await instance.addSubscription('foo:*:bar:*:biff');
-      assert(optionsBase.addListener.callCount === 1);
-      await instance.addSubscription('foo:*:*:*:biff');
-      assert(optionsBase.addListener.callCount === 1);
-      await instance.addSubscription('foo:*:*:*:*');
-      assert(optionsBase.addListener.callCount === 1);
-    });
-
-    it('Will call if different base wildcard', async function() {
-      const instance = new SubscriptionDedupe(Object.assign({}, optionsBase, {
-        levels: 5
-      }));
-      await instance.addSubscription('foo:*:*:*:*');
-      assert(optionsBase.addListener.firstCall.args[0] === 'foo:*:*:*:*');
-      assert(optionsBase.addListener.callCount === 1);
-      await instance.addSubscription('bar:*:*:*:*');
-      assert(optionsBase.addListener.secondCall.args[0] === 'bar:*:*:*:*');
-      assert(optionsBase.addListener.callCount === 2);
-    });
-
-    it('Supersedes if higher wildcard appears', async function() {
-      const instance = new SubscriptionDedupe(Object.assign({}, optionsBase, {
-        levels: 3
-      }));
-      await instance.addSubscription('1:foo:*');
-      await instance.addSubscription('1:bar:*');
-      await instance.addSubscription('1:baz:*');
-      assert(optionsBase.addListener.callCount === 3);
-      await instance.addSubscription('1:*:*');
-      assert(optionsBase.addListener.callCount === 4);
-      await instance.addSubscription('1:biff:*');
-      assert(optionsBase.addListener.callCount === 4);
-      await instance.addSubscription('*:*:*');
-      assert(optionsBase.addListener.callCount === 5);
-      await instance.addSubscription('2:foo:*')
-      await instance.addSubscription('2:bar:*')
-      await instance.addSubscription('2:*:*')
-      assert(optionsBase.addListener.callCount === 5);
     });
   });
 });
