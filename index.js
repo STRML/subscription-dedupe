@@ -52,13 +52,16 @@ module.exports = class SubscriptionDedupe {
 
   unsubscribe(topic/*: string */) {
     let existing = this.subscriptions[topic];
+    let promise
 
     if (existing) {
       existing.refCount--;
       if (existing.refCount === 0) {
-        this.options.onUnsubscribe(topic);
+        promise = existing.promise.then(() => this.options.onUnsubscribe(topic));
         delete this.subscriptions[topic];
       }
     }
+    
+    return promise || Promise.resolve();
   }
 }
