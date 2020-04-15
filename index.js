@@ -45,9 +45,7 @@ module.exports = class SubscriptionDedupe {
         refCount: 0,
         closing: null,
       };
-    }
-
-    if (existing.closing) {
+    } else if (existing.closing) {
       existing.closing.isReopened = true;
       existing.closing = null;
       existing.promise = existing.promise.then(() =>
