@@ -66,10 +66,15 @@ module.exports = class SubscriptionDedupe {
     if (existing) {
       existing.refCount--;
       if (existing.refCount === 0) {
+        // `.closing` is an object with a `isReopened` property
+        // When reopening a connection, we update the `isReopened` property and
+        // set `.closing` to `null`.
+        // This way, multiple reopens will wait for each other.
         if (existing.closing) throw new Error("Already closing?");
 
         const closing = { isReopened: false };
         existing.closing = closing;
+        // $FlowFixMe
         promise = existing.promise = existing.promise
           .then(() => this.options.onUnsubscribe(topic))
           .then(() => {
