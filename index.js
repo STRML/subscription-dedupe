@@ -65,7 +65,9 @@ module.exports = class SubscriptionDedupe {
         existing.refCount--;
       } else if (existing.refCount === 0) {
         // Will happen if you unsubscribe too many times.
-        console.warn(`Attempted to close dedupe subscription for topic "${topic}", but it was already closing.`);
+        if (this.options.warnOnTooManyUnsubscribes !== false) {
+          console.warn(`Attempted to close dedupe subscription for topic "${topic}", but it was already closing.`);
+        }
         return existing.promise;
       } else {
         // No more references. Close down the connection.

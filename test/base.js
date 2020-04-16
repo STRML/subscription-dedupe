@@ -103,7 +103,7 @@ describe("subscription-dedupe", () => {
       });
 
       it('does not allow refCount to go negative even when synchronously called', async function() {
-        const consoleStub = sinon.stub(console, 'warn');
+        const consoleStub = this.sandbox.stub(console, 'warn');
         const topic = 'foo';
         const instance = new SubscriptionDedupe(optionsBase);
 
@@ -127,6 +127,7 @@ describe("subscription-dedupe", () => {
       });
 
       it('recovers from over-unsubscription', async function() {
+        const consoleStub = this.sandbox.stub(console, 'warn');
         const topic = 'foo';
         const instance = new SubscriptionDedupe(optionsBase);
 
@@ -149,6 +150,23 @@ describe("subscription-dedupe", () => {
         assert(instance.subscriptions[topic].refCount === 2);
       });
 
+      it('does not log the over-unsubscription if silent', async function() {
+        const consoleStub = this.sandbox.stub(console, 'warn');
+        const topic = 'foo';
+        const instance = new SubscriptionDedupe(Object.assign({}, optionsBase, {warnOnTooManyUnsubscribes: false}));
+
+        // Subscribe a bunch of times
+        await times(5, () => instance.subscribe(topic));
+
+        // Unsubscribe, more times.
+        let unsubPromise;
+        for (let i = 0; i < 8; i++) {
+          unsubPromise = instance.unsubscribe(topic); 
+        }
+        await unsubPromise;
+
+        sinon.assert.callCount(consoleStub, 0);
+      });
 
       // subscribe -> unsubscribe in single tick
       // Should await the subscribe
