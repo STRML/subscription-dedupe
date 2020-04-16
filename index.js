@@ -63,6 +63,7 @@ module.exports = class SubscriptionDedupe {
 
   unsubscribe(topic /*: string */) {
     let existing = this.subscriptions[topic];
+    let promise;
 
     if (existing) {
       existing.refCount--;
@@ -77,6 +78,7 @@ module.exports = class SubscriptionDedupe {
         // `.closing` is an object with a `isReopened` property
         // When reopening a connection, we update the `isReopened` property and
         // set `.closing` to `null`.
+        // This way, multiple reopens will wait for each other.
         const closing = { isReopened: false };
         existing.closing = closing;
 
