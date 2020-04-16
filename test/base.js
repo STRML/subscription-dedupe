@@ -43,6 +43,7 @@ describe('subscription-dedupe', () => {
         assert(optionsBase.onSubscribe.callCount === 1);
         await instance.subscribe(topic);
         assert(optionsBase.onSubscribe.callCount === 1);
+        assert(instance.subscriptions[topic].refCount === 2);
       });
     });
 
@@ -78,6 +79,30 @@ describe('subscription-dedupe', () => {
         await times(4, () => instance.unsubscribe(topic));
         assert(instance.subscriptions[topic] === undefined);
         assert(optionsBase.onUnsubscribe.callCount === 1);
+      });
+
+      it('does not go negative', async function() {
+        const topic = 'foo';
+        const instance = new SubscriptionDedupe(optionsBase);
+
+        // Subscribe a bunch of times
+        await times(5, () => instance.subscribe(topic));
+        assert(optionsBase.onSubscribe.callCount === 1);
+        assert(instance.subscriptions[topic].refCount === 5);
+
+        await times(2, () => instance.unsubscribe(topic));
+        assert(instance.subscriptions[topic].refCount === 3);
+
+        // Unsub 5x, which would go negative if there were a bug
+        await times(5, () => instance.unsubscribe(topic));
+        assert(optionsBase.onUnsubscribe.callCount === 1);
+        assert(instance.subscriptions[topic] === undefined);
+
+        // Resub. This should trigger a sub
+        await times(1, () => instance.subscribe(topic));
+        assert(instance.subscriptions[topic].refCount === 1);
+        assert(optionsBase.onUnsubscribe.callCount === 1);
+        assert(optionsBase.onSubscribe.callCount === 2);
       });
     });
   });
