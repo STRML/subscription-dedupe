@@ -91,6 +91,10 @@ module.exports = class SubscriptionDedupe {
             }
           });
       }
+    } else {
+      if (this.options.warnOnTooManyUnsubscribes !== false) {
+        console.warn(`Attempted to close dedupe subscription for topic "${topic}", but no subscription was found.`);
+      }
     }
 
     return existing ? existing.promise : Promise.resolve();
