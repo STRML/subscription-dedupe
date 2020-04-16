@@ -117,6 +117,7 @@ describe("subscription-dedupe", () => {
         }
         // in limbo; we know we're closing
         assert(instance.subscriptions[topic].refCount === 0);
+        assert.deepEqual(instance.subscriptions[topic].closing, {isReopened: false});
         // We only need one of them to await
         await unsubPromise;
         assert(optionsBase.onSubscribe.callCount === 1);
@@ -182,11 +183,17 @@ describe("subscription-dedupe", () => {
 
         const pendingSubscribe = instance.subscribe(topic);
         assert(instance.subscriptions[topic].refCount === 1);
+        assert(instance.subscriptions[topic].closing === null);
 
         const pendingUnsubscribe = instance.unsubscribe(topic);
 
         assert(topic in instance.subscriptions);
         assert(instance.subscriptions[topic].refCount === 0);
+
+        assert(
+          instance.subscriptions[topic].closing != null &&
+            instance.subscriptions[topic].closing.isReopened === false
+        );
 
         subscribeDeferred.resolve();
 
@@ -213,17 +220,24 @@ describe("subscription-dedupe", () => {
         const pendingSubscribe1 = instance.subscribe(topic);
         assert(instance.subscriptions[topic].refCount === 1);
         assert(onSubscribe.callCount === 1);
+        assert(instance.subscriptions[topic].closing === null);
 
         const pendingUnsubscribe = instance.unsubscribe(topic);
 
         assert(topic in instance.subscriptions);
         assert(instance.subscriptions[topic].refCount === 0);
+        const { closing } = instance.subscriptions[topic];
+        assert(closing != null && closing.isReopened === false);
 
         const pendingSubscribe2 = instance.subscribe(topic);
 
         // Still 1: we're waiting on both the subscribe & unsubscribe to resolve
         assert(onSubscribe.callCount === 1);
         assert(instance.subscriptions[topic].refCount === 1);
+        // Should have updated object
+        assert(closing != null && closing.isReopened === true);
+        // ...and removed it
+        assert(instance.subscriptions[topic].closing === null);
 
         // Resolve the subscription.
         subscribeDeferred.resolve();

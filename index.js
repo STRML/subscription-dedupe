@@ -19,7 +19,7 @@ type Options = {
   onUnsubscribe: (...args: any) => Promise<any>,
   warnOnTooManyUnsubscribes?: boolean,
 };
-type SubscriptionObject = {promise: Promise<any>, refCount: number, closing?: {isReopened: boolean}};
+type SubscriptionObject = {promise: Promise<any>, refCount: number, closing: ?{isReopened: boolean}};
 type SubscriptionMap = {[key: string]: SubscriptionObject};
 */
 module.exports = class SubscriptionDedupe {
@@ -44,13 +44,14 @@ module.exports = class SubscriptionDedupe {
       existing = this.subscriptions[topic] = {
         promise: this.options.onSubscribe(topic),
         refCount: 0,
+        closing: null,
       };
     } else if (existing.closing) {
       // This connection was closing, but did not finish.
 
       // Unsubscribe handler still will have a reference to this
       existing.closing.isReopened = true;
-      existing.closing = undefined; // but we don't need it anymore
+      existing.closing = null; // but we don't need it anymore
       existing.promise = existing.promise.then(() =>
         this.options.onSubscribe(topic)
       );
