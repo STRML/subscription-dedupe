@@ -23,7 +23,11 @@ const deduper = new SubscriptionDedupe({
   },
   onUnsubscribe(topic) {
     return punsubscribeAsync(topic);
-  }
+  },
+  // If `false`, will not print to console.warn if your code unsubscribes more
+  // than it subscribes (which would result in a negative refCount).
+  // Default `true`
+  warnOnTooManyUnsubscribes: true,
 });
 
 //
