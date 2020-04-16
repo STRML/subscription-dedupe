@@ -17,6 +17,7 @@
 type Options = {
   onSubscribe: (...args: any) => Promise<any>,
   onUnsubscribe: (...args: any) => Promise<any>,
+  warnOnTooManyUnsubscribes?: boolean,
 };
 type SubscriptionObject = {promise: Promise<any>, refCount: number, closing: ?{isReopened: boolean}};
 type SubscriptionMap = {[key: string]: SubscriptionObject};
@@ -46,8 +47,11 @@ module.exports = class SubscriptionDedupe {
         closing: null,
       };
     } else if (existing.closing) {
+      // This connection was closing, but did not finish.
+
+      // Unsubscribe handler still will have a reference to this
       existing.closing.isReopened = true;
-      existing.closing = null;
+      existing.closing = null; // but we don't need it anymore
       existing.promise = existing.promise.then(() =>
         this.options.onSubscribe(topic)
       );
@@ -63,17 +67,23 @@ module.exports = class SubscriptionDedupe {
 
     if (existing) {
       existing.refCount--;
-      if (existing.refCount === 0) {
+      if (existing.refCount < 0 || existing.closing) {
+        // Don't allow this to go negative.
+        // Will happen if you unsubscribe too many times.
+        existing.refCount = 0;
+        if (this.options.warnOnTooManyUnsubscribes !== false) {
+          console.warn(`Attempted to close dedupe subscription for topic "${topic}", but it was already closing.`);
+        }
+      } else if (existing.refCount === 0) {
         // `.closing` is an object with a `isReopened` property
         // When reopening a connection, we update the `isReopened` property and
         // set `.closing` to `null`.
         // This way, multiple reopens will wait for each other.
-        if (existing.closing) throw new Error("Already closing?");
-
         const closing = { isReopened: false };
         existing.closing = closing;
+
         // $FlowFixMe
-        promise = existing.promise = existing.promise
+        existing.promise = existing.promise
           .then(() => this.options.onUnsubscribe(topic))
           .then(() => {
             if (!closing.isReopened) {
@@ -81,8 +91,12 @@ module.exports = class SubscriptionDedupe {
             }
           });
       }
+    } else {
+      if (this.options.warnOnTooManyUnsubscribes !== false) {
+        console.warn(`Attempted to close dedupe subscription for topic "${topic}", but no subscription was found.`);
+      }
     }
 
-    return promise || Promise.resolve();
+    return existing ? existing.promise : Promise.resolve();
   }
 };
