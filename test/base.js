@@ -9,10 +9,10 @@ describe("subscription-dedupe", () => {
   let instance;
   const optionsBase = {
     onSubscribe() {
-      return new Promise((resolve) => setTimeout(() => resolve({}), 0));
+      return Promise.resolve({});
     },
     onUnsubscribe() {
-      return new Promise((resolve) => setTimeout(resolve, 0));
+      return Promise.resolve();
     },
   };
   beforeEach(function () {
@@ -113,12 +113,13 @@ describe("subscription-dedupe", () => {
         // Unsubscribe, more times.
         let unsubPromise;
         for (let i = 0; i < 8; i++) {
-          unsubPromise = instance.unsubscribe(topic); 
+          unsubPromise = instance.unsubscribe(topic);
         }
         // in limbo; we know we're closing
         assert(instance.subscriptions[topic].refCount === 0);
         // We only need one of them to await
         await unsubPromise;
+        assert(optionsBase.onSubscribe.callCount === 1);
         assert(optionsBase.onUnsubscribe.callCount === 1);
         // Console should have alerted us 3x
         sinon.assert.callCount(consoleStub, 3);
@@ -136,7 +137,7 @@ describe("subscription-dedupe", () => {
 
         // Unsubscribe, more times.
         for (let i = 0; i < 8; i++) {
-          instance.unsubscribe(topic); 
+          instance.unsubscribe(topic);
         }
 
         // Now, synchronously subscribe a few times
@@ -161,7 +162,7 @@ describe("subscription-dedupe", () => {
         // Unsubscribe, more times.
         let unsubPromise;
         for (let i = 0; i < 8; i++) {
-          unsubPromise = instance.unsubscribe(topic); 
+          unsubPromise = instance.unsubscribe(topic);
         }
         await unsubPromise;
 
@@ -242,6 +243,62 @@ describe("subscription-dedupe", () => {
         // Make sure this resolves as well
         await pendingSubscribe1;
       });
+
+      //
+      // This is why the `closing` property exists. Without it, the following is possible:
+      //
+      // 1. Subscribe: Creates new subscription object. Stays pending.
+      // 2. Unsubscribe: Updates object, still waiting for (1).
+      // 3. Subscribe: Updates object, still waiting for (1).
+      // 4. Unsubscribe: Updates object, still waiting for (1).
+      // 5. Promises for (1) and (2) resolve. We remove the object in the then of (2). Promises for (3) and (4) are still pending.
+      // 6. Subscribe: Recreates subscription object without waiting for previous steps to complete.
+      // 7. Promises for (3) and (6) resolve.
+      // 8. Promise for (4) completes, removing the subscription. We now have an entry for a subscription we don't hold anymore.
+      it("does not remove state before completion", async function () {
+        const topic = "foo";
+        const subscribeDeferred = [];
+        const unsubscribeDeferred = [];
+        const instance = new SubscriptionDedupe({
+          onSubscribe() {
+            const deferred = Promise.defer();
+            subscribeDeferred.push(deferred);
+            return deferred.promise;
+          },
+          onUnsubscribe() {
+            const deferred = Promise.defer();
+            unsubscribeDeferred.push(deferred);
+            return deferred.promise;
+          },
+        });
+        // 1
+        const pendingSubscribe1 = instance.subscribe(topic);
+        // 2
+        const pendingUnsubscribe1 = instance.unsubscribe(topic);
+        // 3
+        const pendingSubscribe2 = instance.subscribe(topic);
+        // 4
+        const pendingUnsubscribe2 = instance.unsubscribe(topic);
+        // 5
+        subscribeDeferred[0].resolve();
+        await pendingSubscribe1;
+        unsubscribeDeferred[0].resolve();
+        await pendingUnsubscribe1;
+        assert(topic in instance.subscriptions);
+        // 6: This is backed up on pendingUnsubscribe2
+        const pendingSubscribe3 = instance.subscribe(topic);
+        // 7
+        subscribeDeferred[1].resolve();
+        assert(!subscribeDeferred[2]);
+        await pendingSubscribe2;
+        assert(!subscribeDeferred[2]); // does not exist because we're waiting on pendingUnsubscribe2
+        // 8
+        unsubscribeDeferred[1].resolve();
+        await pendingUnsubscribe2;
+        assert(subscribeDeferred[2]);
+        subscribeDeferred[2].resolve();
+        assert(topic in instance.subscriptions);
+      });
     });
   });
 });
@@ -251,3 +308,4 @@ async function times(count, fn) {
     await fn();
   }
 }
+1

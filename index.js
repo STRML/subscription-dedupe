@@ -17,8 +17,9 @@
 type Options = {
   onSubscribe: (...args: any) => Promise<any>,
   onUnsubscribe: (...args: any) => Promise<any>,
+  warnOnTooManyUnsubscribes?: boolean,
 };
-type SubscriptionObject = {promise: Promise<any>, refCount: number};
+type SubscriptionObject = {promise: Promise<any>, refCount: number, closing?: {isReopened: boolean}};
 type SubscriptionMap = {[key: string]: SubscriptionObject};
 */
 module.exports = class SubscriptionDedupe {
@@ -44,9 +45,12 @@ module.exports = class SubscriptionDedupe {
         promise: this.options.onSubscribe(topic),
         refCount: 0,
       };
-    } else if (existing && existing.refCount === 0) {
-      // This connection was closing, but did not finish. If it had,
-      // we wouldn't have found the subscription. 
+    } else if (existing.closing) {
+      // This connection was closing, but did not finish.
+
+      // Unsubscribe handler still will have a reference to this
+      existing.closing.isReopened = true;
+      existing.closing = undefined; // but we don't need it anymore
       existing.promise = existing.promise.then(() =>
         this.options.onSubscribe(topic)
       );
@@ -58,35 +62,34 @@ module.exports = class SubscriptionDedupe {
 
   unsubscribe(topic /*: string */) {
     let existing = this.subscriptions[topic];
-    let promise;
 
     if (existing) {
-      if (existing.refCount > 1) {
-        existing.refCount--;
-      } else if (existing.refCount === 0) {
+      existing.refCount--;
+      if (existing.refCount < 0 || existing.closing) {
+        // Don't allow this to go negative.
         // Will happen if you unsubscribe too many times.
+        existing.refCount = 0;
         if (this.options.warnOnTooManyUnsubscribes !== false) {
           console.warn(`Attempted to close dedupe subscription for topic "${topic}", but it was already closing.`);
         }
-        return existing.promise;
-      } else {
-        // No more references. Close down the connection.
-        existing.refCount = 0;
-
-        // When reopening a connection, the first one will wait for the close before reopening.
-        // This way, multiple reopens will wait for each other.
+      } else if (existing.refCount === 0) {
+        // `.closing` is an object with a `isReopened` property
+        // When reopening a connection, we update the `isReopened` property and
+        // set `.closing` to `null`.
+        const closing = { isReopened: false };
+        existing.closing = closing;
 
         // $FlowFixMe
-        promise = existing.promise = existing.promise
+        existing.promise = existing.promise
           .then(() => this.options.onUnsubscribe(topic))
           .then(() => {
-            if (existing.refCount <= 0) {
+            if (!closing.isReopened) {
               delete this.subscriptions[topic];
             }
           });
       }
     }
 
-    return promise || Promise.resolve();
+    return existing ? existing.promise : Promise.resolve();
   }
 };
