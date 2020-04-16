@@ -16,7 +16,7 @@ describe("subscription-dedupe", () => {
     },
   };
   beforeEach(function () {
-    this.sandbox = sinon.sandbox.create();
+    this.sandbox = sinon.createSandbox();
     this.sandbox.spy(optionsBase, "onSubscribe");
     this.sandbox.spy(optionsBase, "onUnsubscribe");
   });
