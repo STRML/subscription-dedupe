@@ -18,7 +18,7 @@ type Options = {
   onSubscribe: (...args: any) => Promise<any>,
   onUnsubscribe: (...args: any) => Promise<any>,
 };
-type SubscriptionObject = {promise: Promise<any>, refCount: number, closing: ?{isReopened: boolean}};
+type SubscriptionObject = {promise: Promise<any>, refCount: number};
 type SubscriptionMap = {[key: string]: SubscriptionObject};
 */
 module.exports = class SubscriptionDedupe {
@@ -43,11 +43,10 @@ module.exports = class SubscriptionDedupe {
       existing = this.subscriptions[topic] = {
         promise: this.options.onSubscribe(topic),
         refCount: 0,
-        closing: null,
       };
-    } else if (existing.closing) {
-      existing.closing.isReopened = true;
-      existing.closing = null;
+    } else if (existing && existing.refCount === 0) {
+      // This connection was closing, but did not finish. If it had,
+      // we wouldn't have found the subscription. 
       existing.promise = existing.promise.then(() =>
         this.options.onSubscribe(topic)
       );
@@ -62,21 +61,24 @@ module.exports = class SubscriptionDedupe {
     let promise;
 
     if (existing) {
-      existing.refCount--;
-      if (existing.refCount === 0) {
-        // `.closing` is an object with a `isReopened` property
-        // When reopening a connection, we update the `isReopened` property and
-        // set `.closing` to `null`.
-        // This way, multiple reopens will wait for each other.
-        if (existing.closing) throw new Error("Already closing?");
+      if (existing.refCount > 1) {
+        existing.refCount--;
+      } else if (existing.refCount === 0) {
+        // Will happen if you unsubscribe too many times.
+        console.warn(`Attempted to close dedupe subscription for topic "${topic}", but it was already closing.`);
+        return existing.promise;
+      } else {
+        // No more references. Close down the connection.
+        existing.refCount = 0;
 
-        const closing = { isReopened: false };
-        existing.closing = closing;
+        // When reopening a connection, the first one will wait for the close before reopening.
+        // This way, multiple reopens will wait for each other.
+
         // $FlowFixMe
         promise = existing.promise = existing.promise
           .then(() => this.options.onUnsubscribe(topic))
           .then(() => {
-            if (!closing.isReopened) {
+            if (existing.refCount <= 0) {
               delete this.subscriptions[topic];
             }
           });
