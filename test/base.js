@@ -1,5 +1,6 @@
 // @flow
 const { before, beforeEach, after, afterEach, describe, it } = require("mocha");
+const Promise = require('bluebird');
 const assert = require("power-assert");
 const sinon = require("sinon");
 const SubscriptionDedupe = require("../index");
@@ -101,15 +102,15 @@ describe("subscription-dedupe", () => {
         assert(optionsBase.onSubscribe.callCount === 2);
       });
 
+      // subscribe -> unsubscribe in single tick
+      // Should await the subscribe
       it("awaits subscribes before unsubscribing", async function () {
         const topic = "foo";
 
-        let resolveSubscribe;
-        const onSubscribe = () =>
-          new Promise((resolve) => (resolveSubscribe = resolve));
+        const subscribeDeferred = Promise.defer();
         const instance = new SubscriptionDedupe({
           onUnsubscribe: optionsBase.onUnsubscribe,
-          onSubscribe,
+          onSubscribe: () => subscribeDeferred.promise,
         });
 
         const pendingSubscribe = instance.subscribe(topic);
@@ -125,32 +126,32 @@ describe("subscription-dedupe", () => {
             instance.subscriptions[topic].closing.isReopened === false
         );
 
-        if (resolveSubscribe) resolveSubscribe();
+        subscribeDeferred.resolve();
 
         await pendingUnsubscribe;
         assert(!(topic in instance.subscriptions));
 
-        // Make sure this resolves as well
+        // Make sure this resolves as well. It was first, so it won't change state.
         await pendingSubscribe;
+        assert(!(topic in instance.subscriptions));
       });
 
+      // subscribe -> unsubscribe -> subscribe, in single tick
+      // Should await each in turn
       it("allows resubscribes", async function () {
         const topic = "foo";
 
-        let resolveSubscribe;
-        let onSubscribeCallCount = 0;
-        const onSubscribe = () => {
-          onSubscribeCallCount++;
-          return new Promise((resolve) => (resolveSubscribe = resolve));
-        };
+        const subscribeDeferred = Promise.defer();
+        const onSubscribe = sinon.stub().resolves(subscribeDeferred.promise);
         const instance = new SubscriptionDedupe({
           onUnsubscribe: optionsBase.onUnsubscribe,
-          onSubscribe,
+          onSubscribe
         });
 
         const pendingSubscribe1 = instance.subscribe(topic);
         assert(instance.subscriptions[topic].refCount === 1);
         assert(instance.subscriptions[topic].closing === null);
+        assert(onSubscribe.callCount === 1);
 
         const pendingUnsubscribe = instance.unsubscribe(topic);
 
@@ -161,24 +162,24 @@ describe("subscription-dedupe", () => {
 
         const pendingSubscribe2 = instance.subscribe(topic);
 
-        assert(onSubscribeCallCount === 1);
         // Should have updated object
         assert(closing != null && closing.isReopened === true);
         // ...and removed it
         assert(instance.subscriptions[topic].closing === null);
+        // Still 1: we're waiting on both the subscribe & unsubscribe to resolve
+        assert(onSubscribe.callCount === 1);
 
-        if (resolveSubscribe) resolveSubscribe();
+        // Resolve the subscription.
+        subscribeDeferred.resolve();
 
         await pendingUnsubscribe;
         assert(topic in instance.subscriptions);
-
-        if (resolveSubscribe) resolveSubscribe();
 
         await pendingSubscribe2;
 
         assert(topic in instance.subscriptions);
         assert(instance.subscriptions[topic].refCount === 1);
-        assert(onSubscribeCallCount === 2);
+        assert(onSubscribe.callCount === 2);
 
         // Make sure this resolves as well
         await pendingSubscribe1;
